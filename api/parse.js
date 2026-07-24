@@ -1,4 +1,5 @@
 // Vercel Edge Function: /api/parse
+// 版本: 2026-07-24 18:23
 // 使用 Edge Runtime 获得 30 秒超时，避免 Serverless 10 秒超时
 // 同时支持 Kimi 和智谱 GLM 大模型，通过环境变量 PRIMARY_PROVIDER 控制优先级
 
