@@ -632,7 +632,7 @@
 
       const btn = document.getElementById('aiUpdateBtn');
       btn.disabled = true;
-      btn.textContent = '解析中...';
+      btn.textContent = '让大模型思考中（约需几秒）...';
 
       // 1. 先查历史意图缓存
       let intentResult = matchIntentByHistory(text);
@@ -642,7 +642,8 @@
         if (AI_BACKEND === 'zhipu' && AI_BACKEND_URL) {
           try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 秒超时
+            // Edge Function 支持 30 秒，智谱 API 实测约 6-7 秒，给 20 秒超时
+            const timeoutId = setTimeout(() => controller.abort(), 20000);
             const res = await fetch(AI_BACKEND_URL + '/api/parse', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -656,6 +657,7 @@
               })
             });
             clearTimeout(timeoutId);
+            if (!res.ok) throw new Error('后端响应异常');
             const data = await res.json();
             if (data.error) throw new Error(data.error);
             intentResult = data;
@@ -680,12 +682,10 @@
         const addRecords = records.filter(r => r.intent === 'add' || r.intent === 'subtract');
         const updateRecords = records.filter(r => r.intent === 'update');
         if (addRecords.length > 0 && updateRecords.length === 0) {
-          // 有 add/subtract 也有 update 时，优先按 operation 处理
           intentResult = { intent: 'add', records: addRecords };
         } else if (updateRecords.length > 0 && addRecords.length === 0) {
           intentResult = { intent: 'update', records: updateRecords };
         } else if (records.length > 0) {
-          // 混合情况，先执行 add/subtract，再执行 update
           applyRecords(addRecords, '增量记录', 'add');
           applyRecords(updateRecords, '直接记录', 'update');
           btn.disabled = false;
