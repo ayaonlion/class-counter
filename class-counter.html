@@ -672,16 +672,17 @@
       // 本地解析 fallback
       if (intentResult.intent === 'unknown' || (!intentResult.intent && intentResult.records && intentResult.records.length)) {
         const records = intentResult.records || parseLocal(text);
-        const addRecords = records.filter(r => r.intent === 'add');
-        const updateRecords = records.filter(r => r.intent !== 'add');
+        const addRecords = records.filter(r => r.intent === 'add' || r.intent === 'subtract');
+        const updateRecords = records.filter(r => r.intent === 'update');
         if (addRecords.length > 0 && updateRecords.length === 0) {
+          // 有 add/subtract 也有 update 时，优先按 operation 处理
           intentResult = { intent: 'add', records: addRecords };
         } else if (updateRecords.length > 0 && addRecords.length === 0) {
           intentResult = { intent: 'update', records: updateRecords };
         } else if (records.length > 0) {
-          // 混合情况，先执行 add，再执行 update
-          applyRecords(addRecords, '增量记录', true);
-          applyRecords(updateRecords, '直接记录', false);
+          // 混合情况，先执行 add/subtract，再执行 update
+          applyRecords(addRecords, '增量记录', 'add');
+          applyRecords(updateRecords, '直接记录', 'update');
           btn.disabled = false;
           btn.textContent = '让大模型更新数据';
           setTimeout(() => askFeedback(text, 'update', '已混合执行增量和直接记录'), 300);
@@ -707,7 +708,8 @@
       switch (intent) {
         case 'update':
         case 'add':
-          applyRecords(records, description, intent === 'add');
+        case 'subtract':
+          applyRecords(records, description, intent);
           break;
         case 'reset':
         case 'set':
@@ -736,7 +738,7 @@
       if (ok) {
         addIntentSample(text, intent);
       } else {
-        const options = ['update-记录表现', 'add-加次数', 'reset-重置', 'set-设置数值', 'delete-删除', 'query-查询', 'summary-总结', 'unknown-无法理解'];
+        const options = ['update-记录表现', 'add-加次数', 'subtract-减次数', 'reset-重置', 'set-设置数值', 'delete-删除', 'query-查询', 'summary-总结', 'unknown-无法理解'];
         const choice = prompt(`请告诉我正确的意图：\n${options.join('\n')}\n\n输入关键词（如 update）：`, 'update');
         if (choice) {
           const correctIntent = choice.split('-')[0].trim();
@@ -747,7 +749,7 @@
       document.getElementById('aiInput').value = '';
     }
 
-    function applyRecords(records, description, isAdd = false) {
+    function applyRecords(records, description, operation = 'update') {
       if (!records || records.length === 0) {
         alert('没能识别，请试试："今天英语课小明主动举手3次，老师点名2次，不懂问了1次" 或 "今天英语课主动举手加一次"');
         return;
@@ -755,15 +757,18 @@
       records.forEach(r => {
         const cell = getCell(r.date, r.course, r.student);
         if (r.raise) {
-          if (isAdd) cell.raise += parseInt(r.raise, 10);
+          if (operation === 'add') cell.raise += parseInt(r.raise, 10);
+          else if (operation === 'subtract') cell.raise = Math.max(0, cell.raise - parseInt(r.raise, 10));
           else cell.raise = parseInt(r.raise, 10);
         }
         if (r.pick) {
-          if (isAdd) cell.pick += parseInt(r.pick, 10);
+          if (operation === 'add') cell.pick += parseInt(r.pick, 10);
+          else if (operation === 'subtract') cell.pick = Math.max(0, cell.pick - parseInt(r.pick, 10));
           else cell.pick = parseInt(r.pick, 10);
         }
         if (r.question) {
-          if (isAdd) cell.question += parseInt(r.question, 10);
+          if (operation === 'add') cell.question += parseInt(r.question, 10);
+          else if (operation === 'subtract') cell.question = Math.max(0, cell.question - parseInt(r.question, 10));
           else cell.question = parseInt(r.question, 10);
         }
       });
@@ -830,42 +835,49 @@
       const records = [];
       const parts = chunk.split(/[,，]/).filter(Boolean).map(s => s.trim()).filter(Boolean);
       parts.forEach(part => {
-        // 增量表达：加一次 / 再加一次 / 加1次 / 多一次 / 增加一次
-        const isAdd = /(加|增加|多)\s*(一|1|二|2|三|3|四|4|五|5|几|\d+)?\s*(次|个|遍|回|道|题)?/.test(part);
-        const addMatch = part.match(/(加|增加|多)\s*(一|1|二|2|三|3|四|4|五|5|几|\d+)?\s*(次|个|遍|回|道|题)?/);
-        let addValue = 1;
-        if (addMatch && addMatch[2]) {
-          const v = addMatch[2];
-          if (/[一二三四五]/.test(v)) {
-            const map = {'一':1,'二':2,'三':3,'四':4,'五':5};
-            addValue = map[v] || 1;
-          } else {
-            addValue = parseInt(v, 10) || 1;
-          }
+        // 语义判断：运算表达
+        // 增量信号：加 / + / 多 / 再来 / 追加 / 升 / 翻倍
+        // 减量信号：减 / - / 少
+        const addSignals = ['加', '+', '多', '再来', '追加', '升', '翻倍'];
+        const subSignals = ['减', '-', '少'];
+        const isAdd = addSignals.some(s => part.includes(s));
+        const isSubtract = subSignals.some(s => part.includes(s));
+        const isOperation = isAdd || isSubtract;
+
+        // 提取数值：优先数字+量词，或中文数字
+        let value = 1;
+        const cnMatch = part.match(/[一二三四五]/);
+        const numMatch = part.match(/(\d+)/);
+        if (numMatch) value = parseInt(numMatch[1], 10);
+        else if (cnMatch) {
+          const map = {'一':1,'二':2,'三':3,'四':4,'五':5};
+          value = map[cnMatch[0]] || 1;
         }
+        // 翻倍特殊处理：当前值翻倍，临时用 value=2 表示翻倍
+        if (part.includes('翻倍')) value = 2;
 
         const numMatches = [...part.matchAll(/(\d+)[\s\w]*?(次|个|遍|回|道|题)?/g)];
-        if (numMatches.length === 0 && !isAdd) return;
+        if (numMatches.length === 0 && !isOperation) return;
 
-        if (isAdd && numMatches.length === 0) {
+        if (isOperation && numMatches.length === 0) {
           const type = inferType(part);
-          records.push({ date, course, student, intent: 'add', [type]: addValue });
+          records.push({ date, course, student, intent: isAdd ? 'add' : 'subtract', [type]: value });
           return;
         }
 
         if (numMatches.length === 1) {
-          const n = isAdd ? addValue : parseInt(numMatches[0][1], 10);
+          const n = isOperation ? value : parseInt(numMatches[0][1], 10);
           const type = inferType(part);
-          records.push({ date, course, student, intent: isAdd ? 'add' : 'update', [type]: n });
+          records.push({ date, course, student, intent: isOperation ? (isAdd ? 'add' : 'subtract') : 'update', [type]: n });
           return;
         }
 
         numMatches.forEach(m => {
-          const n = isAdd ? addValue : parseInt(m[1], 10);
+          const n = isOperation ? value : parseInt(m[1], 10);
           const idx = m.index;
           const segment = part.slice(Math.max(0, idx - 8), Math.min(part.length, idx + 12));
           const type = inferType(segment + ' ' + part);
-          records.push({ date, course, student, intent: isAdd ? 'add' : 'update', [type]: n });
+          records.push({ date, course, student, intent: isOperation ? (isAdd ? 'add' : 'subtract') : 'update', [type]: n });
         });
       });
       return records;
