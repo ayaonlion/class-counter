@@ -25,7 +25,7 @@ export default async function handler(req, res) {
 
 请识别用户意图，返回格式如下：
 {
-  "intent": "update|add|reset|set|delete|query|summary|unknown",
+  "intent": "update|add|subtract|set|reset|delete|query|summary|unknown",
   "description": "简短说明你的理解",
   "parameters": {
     "date": "YYYY-MM-DD 或 null",
@@ -36,33 +36,41 @@ export default async function handler(req, res) {
     "scope": "all|date|course|student"
   },
   "records": [
-    // 仅 update / add 意图需要；add 表示增量，如 加1次
+    // update/add/subtract 意图需要；add/subtract 表示在现有基础上增加/减少
     {"date": "2026-07-24", "course": "英语(殷)", "student": "小明", "raise": 1, "pick": 0, "question": 0}
   ]
 }
 
-意图说明：
-- update: 记录课堂表现，直接给出具体次数，如"今天英语课小明举手3次，老师点名2次"
-- add: 在现有次数上增加，如"今天英语课小明举手加一次""英语课主动回答再加2次"
-- reset: 重置/清零，如"重置所有主动举手次数"
-- set: 设置具体数值，如"把今天英语课小明的举手次数设为5"
-- delete: 删除记录，如"删除昨天数学课小明的记录"
-- query: 查询统计，如"这周谁举手最多""今天英语课小明举手几次"
-- summary: 总结，如"总结本周表现"
-- unknown: 无法理解
+意图说明（理解语义，不要死记字面）：
+- update: 用户直接给出一个最终的具体次数。例如："今天英语课小明举手3次""老师点名2次""不懂问了1次"。
+- add: 用户表达的是"在当前记录的基础上再增加/追加/多 N 次"。只要语义是"增加"，不管具体措辞是什么（"加一次""+1次""多一次""再来一次""追加一次""翻倍"），都应该识别为 add。默认增加对象是主动举手（raise），除非上下文明确指向老师点名或不懂就问。翻倍时 value 填翻倍后的目标值（如当前 1 次翻倍则为 2）。
+- subtract: 用户表达的是"在当前记录的基础上减少 N 次"。例如："减一次""少一次""-1次"。
+- set: 用户明确要把某个值设为具体数字。例如："把今天英语课举手次数设为5""改成3次"。
+- reset: 用户要把某些记录清零。例如："重置所有主动举手次数""全部清零"。
+- delete: 删除记录，如"删除昨天数学课小明的记录"。
+- query: 查询统计，如"这周谁举手最多""今天英语课小明举手几次"。
+- summary: 总结，如"总结本周表现"。
+- unknown: 完全无法理解。
 
-关键词对应：
-- raise: 主动举手 / 举手 / 主动回答 / 发言 / 抢答 / 加一次（当明确指主动举手）
+字段对应：
+- raise: 主动举手 / 举手 / 主动回答 / 发言 / 抢答
 - pick: 老师点名 / 点名 / 被点到 / 老师叫到
 - question: 不懂就问 / 提问 / 问问题 / 不会 / 问了 / 求助
 
-增量识别规则：
-- "加一次""再加一次""加1次""多一次""增加一次" → 如果上下文没有明确类型，默认对应主动举手（raise），value=1
-- "举手加一次" → raise +1
-- "老师点名加一次" → pick +1
-- "不懂的问加一次" → question +1
-- "加两次" → value=2
-- add 意图必须给出 records，records 中相应字段为增量值
+示例：
+- "今天英语课举手3次" → update, records: [{"raise":3}]
+- "今天英语课举手加一次" → add, records: [{"raise":1}]
+- "今天英语课举手+1次" → add, records: [{"raise":1}]
+- "今天英语课举手多一次" → add, records: [{"raise":1}]
+- "今天英语课举手再来一次" → add, records: [{"raise":1}]
+- "今天英语课举手翻倍" → add, records: [{"raise":2}]
+- "昨天语文课老师点名加一次" → add, records: [{"pick":1}]
+- "数学课不懂的问加两次" → add, records: [{"question":2}]
+- "今天英语课举手减一次" → subtract, records: [{"raise":1}]
+- "把今天英语课举手次数设为5" → set, parameters: {"value":5}
+- "重置所有主动举手次数" → reset, parameters: {"field":"raise", "scope":"all"}
+
+只返回 JSON，不要任何解释文字。
 
 用户输入："""${text}"""`;
 
@@ -153,8 +161,8 @@ async function parseAndFilter(content, students, courses) {
   // 规范化参数
   parsed.parameters = parsed.parameters || {};
 
-  // 如果是 update / add 意图，过滤并规范化 records
-  if (parsed.intent === 'update' || parsed.intent === 'add') {
+  // 如果是 update / add / subtract 意图，过滤并规范化 records
+  if (parsed.intent === 'update' || parsed.intent === 'add' || parsed.intent === 'subtract') {
     const validStudents = students || [];
     const validCourses = courses || [];
     parsed.records = (parsed.records || []).filter(r => {
