@@ -641,9 +641,12 @@
       if (!intentResult) {
         if (AI_BACKEND === 'zhipu' && AI_BACKEND_URL) {
           try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 秒超时
             const res = await fetch(AI_BACKEND_URL + '/api/parse', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
+              signal: controller.signal,
               body: JSON.stringify({
                 text,
                 students: state.students,
@@ -652,6 +655,7 @@
                 defaultDate: state.viewing.date
               })
             });
+            clearTimeout(timeoutId);
             const data = await res.json();
             if (data.error) throw new Error(data.error);
             intentResult = data;
@@ -659,7 +663,8 @@
               document.getElementById('aiMode').textContent = data.provider === 'kimi' ? 'Kimi 大模型' : '智谱大模型';
             }
           } catch (e) {
-            // 后端失败，用本地解析作为 fallback
+            // 后端失败或超时，用本地解析作为 fallback
+            console.warn('大模型调用失败或超时，使用本地解析:', e.message);
             const records = parseLocal(text);
             intentResult = { intent: records && records.length ? 'update' : 'unknown', records };
           }
