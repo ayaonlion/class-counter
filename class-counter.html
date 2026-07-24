@@ -1,0 +1,1330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>课堂记录小助手</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --primary: #4f46e5;
+      --green: #22c55e;
+      --orange: #f97316;
+      --purple: #8b5cf6;
+      --blue: #3b82f6;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --line: #f3f4f6;
+      --shadow: 0 10px 30px rgba(0,0,0,0.08);
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); }
+    body { display: flex; flex-direction: column; }
+    header { padding: 20px 18px 10px; text-align: center; }
+    header h1 { margin: 0; font-size: 24px; }
+    header p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+    .container { flex: 1; overflow-y: auto; padding: 0 14px 24px; }
+    .tab-bar { display: flex; gap: 8px; margin-bottom: 14px; }
+    .tab { flex: 1; padding: 12px; text-align: center; border-radius: 16px; background: var(--card); font-weight: 700; font-size: 15px; cursor: pointer; box-shadow: var(--shadow); color: var(--muted); }
+    .tab.active { background: var(--primary); color: #fff; }
+    .page { display: none; }
+    .page.active { display: block; }
+    .section { background: var(--card); border-radius: 22px; padding: 16px; box-shadow: var(--shadow); margin-bottom: 16px; }
+    .section h3 { margin: 0 0 12px; font-size: 16px; }
+    .empty { color: var(--muted); text-align: center; padding: 20px 0; font-size: 14px; }
+    .btn-icon { width: 42px; height: 42px; border: none; border-radius: 12px; background: var(--bg); cursor: pointer; font-size: 18px; }
+
+    /* 课程表 - 手机按天 */
+    .day-list { padding-top: 4px; }
+    .day-block { background: var(--card); border-radius: 18px; padding: 0; box-shadow: var(--shadow); margin-bottom: 12px; overflow: hidden; }
+    .day-block .day-title { position: sticky; top: 0; z-index: 10; font-size: 14px; color: var(--text); padding: 12px 14px; font-weight: 700; background: var(--card); border-bottom: 1px solid var(--line); box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+    .day-block .day-title .today-tag { background: var(--primary); color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 11px; margin-left: 6px; }
+    .day-block .chips { padding: 10px 14px 14px; }
+    .course-chip { display: flex; justify-content: space-between; align-items: center; background: var(--bg); border-radius: 14px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; transition: transform 0.08s; }
+    .course-chip:active { transform: scale(0.98); }
+    .course-chip:last-child { margin-bottom: 0; }
+    .course-chip .left { display: flex; align-items: center; gap: 10px; }
+    .course-chip .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .course-chip .name { font-weight: 700; font-size: 15px; }
+    .course-chip .time { color: var(--muted); font-size: 13px; margin-top: 2px; }
+    .course-chip .meta { color: var(--muted); font-size: 12px; text-align: right; }
+    .course-chip .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; margin-left: 4px; }
+    .course-chip .badge.green { background: #dcfce7; color: #166534; }
+    .course-chip .badge.orange { background: #ffedd5; color: #9a3412; }
+    .course-chip .badge.purple { background: #ede9fe; color: #5b21b6; }
+
+    /* 课程表 - iPad/PC 按周 */
+    .week-grid { display: none; }
+    .week-head { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-bottom: 8px; }
+    .week-head-cell { text-align: center; font-weight: 700; font-size: 14px; color: var(--muted); padding: 8px; }
+    .week-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+    .week-day { background: var(--card); border-radius: 14px; min-height: 130px; padding: 8px; box-shadow: var(--shadow); }
+    .week-day.weekend { background: #f8fafc; }
+    .week-day.today { outline: 2px solid var(--primary); }
+    .week-day .day-num { font-size: 12px; color: var(--muted); margin-bottom: 6px; text-align: right; }
+    .week-day .week-course { border-radius: 8px; padding: 6px 8px; margin-bottom: 6px; color: #fff; font-size: 12px; cursor: pointer; }
+    .week-day .week-course .title { font-weight: 700; }
+    .week-day .week-course .time { font-size: 11px; opacity: 0.95; }
+    .week-day .week-course .counts { font-size: 10px; opacity: 0.9; margin-top: 2px; }
+
+    /* 记录页 */
+    .record-header { background: var(--card); border-radius: 18px; padding: 14px 16px; box-shadow: var(--shadow); margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
+    .record-header .info { font-size: 15px; }
+    .record-header .info .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+    .record-header .back { border: none; background: var(--bg); color: var(--primary); padding: 10px 16px; border-radius: 12px; font-weight: 700; font-size: 14px; cursor: pointer; }
+    .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .card { text-align: center; padding: 16px 10px; border-radius: 20px; background: var(--bg); }
+    .card.wide { grid-column: 1 / -1; }
+    .card .label { color: var(--muted); font-size: 14px; margin-bottom: 8px; }
+    .card .num { font-size: 44px; font-weight: 800; line-height: 1; margin-bottom: 12px; }
+    .card .num.green { color: var(--green); }
+    .card .num.orange { color: var(--orange); }
+    .card .num.purple { color: var(--purple); }
+    .big-btn { width: 100%; padding: 15px; border: none; border-radius: 16px; font-size: 17px; font-weight: 700; color: #fff; cursor: pointer; transition: transform 0.08s; }
+    .big-btn:active { transform: scale(0.96); }
+    .big-btn.green { background: var(--green); }
+    .big-btn.orange { background: var(--orange); }
+    .big-btn.purple { background: var(--purple); }
+    .ai-box { margin-top: 14px; }
+    .ai-box textarea { width: 100%; min-height: 60px; padding: 12px; font-size: 15px; border: 2px solid #e5e7eb; border-radius: 14px; resize: none; outline: none; font-family: inherit; }
+    .ai-box .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+    .ai-controls { display: flex; gap: 8px; margin-bottom: 8px; }
+    .voice-btn { flex: 1; padding: 12px; border: none; border-radius: 12px; background: var(--bg); color: var(--text); font-weight: 700; font-size: 14px; cursor: pointer; transition: background 0.15s; }
+    .voice-btn.listening { background: #fee2e2; color: #991b1b; }
+    .primary-btn { width: 100%; padding: 14px; margin-top: 10px; border: none; border-radius: 14px; background: var(--primary); color: #fff; font-size: 15px; font-weight: 700; cursor: pointer; }
+    .primary-btn:active { opacity: 0.9; }
+    .secondary-btn { width: 100%; padding: 12px; border: none; border-radius: 14px; background: #e0e7ff; color: var(--primary); font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 8px; }
+
+    /* 总结 */
+    .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+    .summary-card { background: var(--bg); border-radius: 18px; padding: 14px; text-align: center; }
+    .summary-card .val { font-size: 26px; font-weight: 800; color: var(--primary); }
+    .summary-card .lab { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .summary-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .summary-tab-bar { display: flex; gap: 8px; margin-bottom: 14px; }
+    .summary-tab { flex: 1; padding: 10px; text-align: center; border-radius: 12px; background: var(--bg); font-weight: 700; font-size: 14px; cursor: pointer; color: var(--muted); }
+    .summary-tab.active { background: var(--primary); color: #fff; }
+    .summary-page { display: none; }
+    .summary-page.active { display: block; }
+    .summary-calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 16px; }
+    .summary-calendar-head { text-align: center; font-size: 12px; color: var(--muted); font-weight: 600; padding: 6px 0; }
+    .summary-calendar-cell { background: var(--bg); border-radius: 10px; min-height: 58px; padding: 6px; text-align: center; cursor: pointer; transition: transform 0.08s; }
+    .summary-calendar-cell:active { transform: scale(0.96); }
+    .summary-calendar-cell .day { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .summary-calendar-cell .total { font-size: 18px; font-weight: 800; color: var(--primary); }
+    .summary-calendar-cell .sub { font-size: 10px; color: var(--muted); margin-top: 2px; }
+    .summary-calendar-cell.today { outline: 2px solid var(--primary); background: #eff6ff; }
+    .summary-calendar-cell.empty { background: transparent; cursor: default; }
+    .summary-detail { background: var(--bg); border-radius: 14px; padding: 12px 14px; margin-bottom: 14px; }
+    .summary-detail h4 { margin: 0 0 8px; font-size: 15px; }
+    .detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+    .detail-row:last-child { border-bottom: none; }
+    .summary-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .summary-nav button { border: none; background: var(--bg); color: var(--primary); padding: 8px 14px; border-radius: 10px; font-weight: 700; font-size: 13px; cursor: pointer; }
+    .summary-nav .title { font-weight: 700; font-size: 16px; }
+    .summary-table th:nth-child(5), .summary-table td:nth-child(5) { text-align: center; }
+    .selector-row { display: flex; gap: 8px; margin-bottom: 12px; }
+    .selector-row input { flex: 1; padding: 12px; border: none; border-radius: 12px; background: var(--bg); font-size: 15px; outline: none; }
+    .selector-row button { padding: 12px 16px; border: none; border-radius: 12px; background: var(--primary); color: #fff; font-weight: 700; font-size: 14px; cursor: pointer; }
+
+    /* 弹窗 */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center; z-index: 100; }
+    .modal { background: #fff; border-radius: 24px; width: 88%; max-width: 380px; padding: 22px; max-height: 80vh; overflow-y: auto; }
+    .modal h3 { margin: 0 0 14px; }
+    .modal input { width: 100%; padding: 13px; font-size: 16px; border: 2px solid #e5e7eb; border-radius: 14px; margin-bottom: 10px; outline: none; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 6px; }
+    .modal-actions button { flex: 1; padding: 12px; border: none; border-radius: 14px; font-size: 15px; cursor: pointer; }
+    .modal-actions .save { background: var(--primary); color: #fff; }
+    .modal-actions .cancel { background: #f3f4f6; color: var(--text); }
+    .cheer-toast { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; border-radius: 24px; padding: 28px 32px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); z-index: 200; text-align: center; display: none; max-width: 86%; }
+    .cheer-toast .emoji { font-size: 52px; margin-bottom: 12px; }
+    .cheer-toast .text { font-size: 19px; font-weight: 800; color: var(--primary); line-height: 1.5; }
+    .cheer-toast .sub { font-size: 13px; color: var(--muted); margin-top: 10px; }
+
+    @media (min-width: 768px) {
+      .day-list { display: none; }
+      .week-grid { display: block; }
+      .container { padding: 0 24px 24px; }
+      .cards { grid-template-columns: 1fr 1fr 1fr; }
+      .card.wide { grid-column: 1 / -1; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>📚 课堂记录小助手</h1>
+    <p>先看课程，再记录表现</p>
+  </header>
+
+  <div class="container">
+    <div class="tab-bar">
+      <div class="tab active" onclick="showPage('schedule')">课程表</div>
+      <div class="tab" onclick="showPage('record')">记一笔</div>
+      <div class="tab" onclick="showPage('summary')">总结</div>
+    </div>
+
+    <!-- 课程表页 -->
+    <div id="page-schedule" class="page active">
+      <!-- 手机按天 -->
+      <div class="day-list" id="dayList"></div>
+      <!-- iPad/PC 按周 -->
+      <div class="week-grid" id="weekGrid"></div>
+    </div>
+
+    <!-- 记录页 -->
+    <div id="page-record" class="page">
+      <div class="record-header">
+        <div class="info">
+          <div id="recordContext">英语 · 7/24 · 10:00-11:30</div>
+          <div class="sub" id="recordStudentSub">👤 小明</div>
+        </div>
+        <button class="back" onclick="showPage('schedule')">返回课程表</button>
+      </div>
+      <div class="row" style="display:flex;gap:10px;margin-bottom:14px;">
+        <select id="studentSelect" style="flex:1;padding:13px;border:none;border-radius:14px;background:var(--card);box-shadow:var(--shadow);font-size:16px;outline:none;"></select>
+        <button class="btn-icon" onclick="openStudentModal()">⚙️</button>
+      </div>
+      <div class="cards" id="recordCards">
+        <div class="card">
+          <div class="label">🙋 主动举手</div>
+          <div class="num green" id="countRaise">0</div>
+          <button class="big-btn green" onclick="add('raise')">+1</button>
+        </div>
+        <div class="card">
+          <div class="label">👈 老师点名</div>
+          <div class="num orange" id="countPick">0</div>
+          <button class="big-btn orange" onclick="add('pick')">+1</button>
+        </div>
+        <div class="card">
+          <div class="label">🤔 不懂就问</div>
+          <div class="num purple" id="countQuestion">0</div>
+          <button class="big-btn purple" onclick="add('question')">+1</button>
+        </div>
+      </div>
+      <div class="section ai-box">
+        <h3>🎤 告诉大模型</h3>
+        <div class="ai-controls">
+          <button class="voice-btn" id="voiceBtn" onclick="toggleVoice()">🎙️ 按住说话</button>
+        </div>
+        <textarea id="aiInput" placeholder="例如：今天英语课小明主动举手3次，老师点名2次，不懂问了1次"></textarea>
+        <button class="primary-btn" id="aiUpdateBtn" onclick="aiUpdate()">让大模型更新数据</button>
+        <div class="hint">
+          当前模式：<b id="aiMode">本地模拟</b>
+          <span id="aiBackendUrl"></span>
+          <a href="#" onclick="openAiConfig()" style="margin-left:8px;color:var(--primary);">配置</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- 总结页 -->
+    <div id="page-summary" class="page">
+      <div class="section">
+        <div class="summary-tab-bar">
+          <div class="summary-tab active" onclick="showSummaryTab('week')">周总结</div>
+          <div class="summary-tab" onclick="showSummaryTab('month')">月总结</div>
+        </div>
+
+        <!-- 周总结 -->
+        <div id="summary-week" class="summary-page active">
+          <div class="summary-nav">
+            <button onclick="shiftWeek(-1)">‹ 上周</button>
+            <div class="title" id="weekNavTitle">7/21 - 7/27</div>
+            <button onclick="shiftWeek(1)">下周 ›</button>
+          </div>
+          <div class="selector-row">
+            <select id="weekCourseFilter" onchange="setWeekCourse(this.value)" style="flex:1;padding:12px;border:none;border-radius:12px;background:var(--bg);font-size:15px;outline:none;">
+              <option value="">全部课程</option>
+            </select>
+          </div>
+          <div class="summary-calendar" id="weekCalendar"></div>
+          <div class="summary-detail" id="weekDetail" style="display:none;"></div>
+          <h3 id="weeklyTitle">📊 本周统计</h3>
+          <div id="weeklySummary"><div class="empty">还没有记录</div></div>
+        </div>
+
+        <!-- 月总结 -->
+        <div id="summary-month" class="summary-page">
+          <div class="summary-nav">
+            <button onclick="shiftMonth(-1)">‹ 上月</button>
+            <div class="title" id="monthNavTitle">2026年7月</div>
+            <button onclick="shiftMonth(1)">下月 ›</button>
+          </div>
+          <div class="selector-row">
+            <select id="monthCourseFilter" onchange="setMonthCourse(this.value)" style="flex:1;padding:12px;border:none;border-radius:12px;background:var(--bg);font-size:15px;outline:none;">
+              <option value="">全部课程</option>
+            </select>
+          </div>
+          <div class="summary-calendar" id="monthCalendar"></div>
+          <div class="summary-detail" id="monthDetail" style="display:none;"></div>
+          <h3 id="monthlyTitle">📈 本月统计</h3>
+          <div id="monthlySummary"><div class="empty">还没有记录</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 管理小朋友弹窗 -->
+  <div class="modal-overlay" id="studentModal">
+    <div class="modal">
+      <h3>管理小朋友</h3>
+      <input type="text" id="studentNames" placeholder="用逗号分隔，如：小明,小红,小华">
+      <div class="modal-actions">
+        <button class="cancel" onclick="closeModal()">取消</button>
+        <button class="save" onclick="saveStudents()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI 配置弹窗 -->
+  <div class="modal-overlay" id="aiConfigModal">
+    <div class="modal">
+      <h3>配置大模型</h3>
+      <label style="display:block;font-size:13px;color:var(--muted);margin-bottom:6px;">模式</label>
+      <select id="aiConfigMode" style="width:100%;padding:13px;font-size:16px;border:2px solid #e5e7eb;border-radius:14px;margin-bottom:10px;outline:none;">
+        <option value="local">本地模拟</option>
+        <option value="zhipu">智谱后端</option>
+      </select>
+      <label style="display:block;font-size:13px;color:var(--muted);margin-bottom:6px;">后端地址（例如 https://xxx.vercel.app）</label>
+      <input type="text" id="aiConfigUrl" placeholder="https://你的后端域名">
+      <div class="modal-actions">
+        <button class="cancel" onclick="closeAiConfig()">取消</button>
+        <button class="save" onclick="saveAiConfig()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 鼓励弹窗 -->
+  <div class="cheer-toast" id="cheerToast" onclick="hideCheer()">
+    <div class="emoji" id="cheerEmoji">🎉</div>
+    <div class="text" id="cheerText">太棒了！</div>
+    <div class="sub">点击任意处关闭</div>
+  </div>
+
+  <script>
+    const storageKey = 'class-course-data-v4';
+    const usedCheerKey = 'class-used-cheers-v2';
+    const aiBackendKey = 'class-ai-backend';
+    const defaultCourses = ['语文','数学','英语','科学','音乐','美术','体育','班会','其他'];
+
+    // AI 后端配置：默认本地模拟，可切换为真实后端
+    const DEFAULT_AI_BACKEND = 'zhipu';
+    const DEFAULT_AI_BACKEND_URL = 'https://class-counter-lodzscilg-ayaonlion-6301s-projects.vercel.app';
+    const AI_BACKEND = localStorage.getItem(aiBackendKey) || DEFAULT_AI_BACKEND;
+    const AI_BACKEND_URL = localStorage.getItem(aiBackendKey + '-url') || DEFAULT_AI_BACKEND_URL;
+
+    // 暑期课程规则：语文/数学 拆分为两个独立课程
+    function generateCourses() {
+      const events = [];
+      const JUL13 = new Date(2026, 6, 13);
+      const SCHEDULE_END = new Date(2026, 7, 31);
+      const sameDay = (a,b) => a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
+      const add = (d, name, time, cls) => events.push({ date: new Date(d), name, time, cls });
+
+      // 英语（殷老师）：每周一三五 10:00-11:30，共11节，7/13不上，8/5不上，补7/26 10:00-11:30
+      let yinCount = 0;
+      for (let d = new Date(2026, 6, 13); yinCount < 11; d.setDate(d.getDate()+1)) {
+        if (sameDay(d, new Date(2026, 7, 5))) { d.setDate(d.getDate()+1); continue; }
+        if ([1,3,5].includes(d.getDay()) && !sameDay(d, JUL13)) {
+          add(d, '英语(殷)', '10:00-11:30', 'yin');
+          yinCount++;
+        }
+      }
+      add(new Date(2026, 6, 26), '英语(殷)', '10:00-11:30', 'yin');
+
+      // 数学+语文（张老师）：周二四六 数学8:00-10:00、语文10:00-12:00；周日只上数学8:00-10:00；到8月4日
+      const zhangEnd = new Date(2026, 7, 4);
+      for (let d = new Date(2026, 6, 14); d <= zhangEnd; d.setDate(d.getDate()+1)) {
+        const wd = d.getDay();
+        if (wd === 0) {
+          add(d, '数学(张)', '8:00-10:00', 'zhang');
+        } else if ([2,4,6].includes(wd)) {
+          add(d, '数学(张)', '8:00-10:00', 'zhang');
+          add(d, '语文(张)', '10:00-12:00', 'zhang');
+        }
+      }
+
+      // 小提琴：每周一三 14:00-14:45，到8月底，7/13不上
+      for (let d = new Date(2026, 6, 13); d <= SCHEDULE_END; d.setDate(d.getDate()+1)) {
+        if ([1,3].includes(d.getDay()) && !sameDay(d, JUL13)) {
+          add(d, '小提琴', '14:00-14:45', 'violin');
+        }
+      }
+
+      // 英语（miki）：周二 17:30-19:00 / 周六 15:00-16:30
+      for (let d = new Date(2026, 6, 14); d <= SCHEDULE_END; d.setDate(d.getDate()+1)) {
+        if (d.getDay() === 2) add(d, '英语(miki)', '17:30-19:00', 'miki');
+        if (d.getDay() === 6) add(d, '英语(miki)', '15:00-16:30', 'miki');
+      }
+
+      // 拿录取通知书 7/14
+      add(new Date(2026, 6, 14), '拿录取通知书', '14:00-18:00', 'special');
+
+      return events;
+    }
+    const COURSE_EVENTS = generateCourses();
+    const COURSE_BY_DATE = {};
+    COURSE_EVENTS.forEach(e => {
+      const k = `${e.date.getFullYear()}-${String(e.date.getMonth()+1).padStart(2,'0')}-${String(e.date.getDate()).padStart(2,'0')}`;
+      if (!COURSE_BY_DATE[k]) COURSE_BY_DATE[k] = [];
+      COURSE_BY_DATE[k].push(e);
+    });
+    Object.values(COURSE_BY_DATE).forEach(arr => arr.sort((a,b) => startMinutes(a.time) - startMinutes(b.time)));
+
+    function startMinutes(timeStr) {
+      const s = timeStr.split('-')[0];
+      const [h,m] = s.split(':').map(Number);
+      return h * 60 + (m || 0);
+    }
+
+    const cheers = {
+      raise: [
+        ['🌟','又主动举手啦！'],['🚀','越勇敢，越闪光！'],['🎉','小手举得真高！'],
+        ['💪','主动思考，超级酷！'],['👏','这一举，光芒万丈！'],['🔥','勇气值 +1！'],
+        ['✨','你是课堂小太阳！'],['🥇','积极小标兵！'],['🌈','想法真多，继续发光！'],
+        ['🎈','今天的你特别棒！'],['🦸','勇敢站出来，你就是英雄！'],['🍀','幸运会奖励主动的人！']
+      ],
+      pick: [
+        ['🎯','老师点到你了，说明很靠谱！'],['📢','表达清晰，继续加油！'],['🌟','被点名也能从容应对！'],
+        ['👍','回答得真棒！'],['🎓','学识小达人就是你！'],['💡','你的思路点亮课堂！'],
+        ['🏆','每次发言都在进步！'],['🌻','自信的样子最好看！'],['⚡','反应超快！'],
+        ['🎁','又会了一道题，真厉害！'],['🥳','老师又看到你的努力了！'],['🌠','星星因此而亮！']
+      ],
+      question: [
+        ['❓','不懂就问，最会学习！'],['🧩','提出问题，就是进步的开始！'],['🔍','会提问的人更聪明！'],
+        ['📚','把疑惑解开，知识才属于你！'],['🌱','每一次提问都在成长！'],['💬','勇敢说出来，答案就来了！'],
+        ['🗝️','问题是打开知识大门的钥匙！'],['🌟','能发现自己的不懂，特别棒！'],['🚀','问清楚，才能飞更远！'],
+        ['🎓','好学的小朋友最可爱！'],['🤗','老师和同学都愿意帮助你！'],['✨','你越来越会学习了！']
+      ]
+    };
+
+    let state = {
+      students: ['小明','小红','小华','小丽'],
+      current: '小明',
+      records: {},
+      viewing: { date: new Date().toISOString().slice(0,10), course: '英语', time: '10:00-11:30' }
+    };
+
+    function load() {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        state = { ...state, ...parsed };
+      }
+      // 默认 viewing 为今天第一节有课的课程
+      const today = new Date().toISOString().slice(0,10);
+      if (!state.viewing || !state.viewing.date) state.viewing = { date: today, course: '英语', time: '10:00-11:30' };
+      if (COURSE_BY_DATE[today] && COURSE_BY_DATE[today].length) {
+        state.viewing = { date: today, course: COURSE_BY_DATE[today][0].name, time: COURSE_BY_DATE[today][0].time };
+      }
+      summaryState.week = today;
+      summaryState.month = today.slice(0,7);
+      populateCourseFilters();
+      renderStudentSelect();
+      renderSchedule();
+      renderRecord();
+      renderSummary();
+    }
+
+    function save() {
+      localStorage.setItem(storageKey, JSON.stringify(state));
+      renderSchedule();
+      renderRecord();
+      renderSummary();
+    }
+
+    function renderStudentSelect() {
+      const sel = document.getElementById('studentSelect');
+      sel.innerHTML = state.students.map(s => `<option value="${s}" ${s===state.current?'selected':''}>${s}</option>`).join('');
+      sel.onchange = (e) => { state.current = e.target.value; renderRecord(); };
+    }
+
+    function getCell(date, course, student) {
+      if (!state.records[date]) state.records[date] = {};
+      if (!state.records[date][course]) state.records[date][course] = {};
+      if (!state.records[date][course][student]) state.records[date][course][student] = { raise: 0, pick: 0, question: 0 };
+      return state.records[date][course][student];
+    }
+
+    function dateKey(d) {
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+    const WEEKDAYS = ['周日','周一','周二','周三','周四','周五','周六'];
+    const clsMap = { yin: '#991b1b', zhang: '#0c4a6e', miki: '#5b21b6', violin: '#9a3412', special: '#065f46' };
+
+    function getCountsForChip(date, course) {
+      let raise = 0, pick = 0, question = 0;
+      const day = state.records[date];
+      if (day && day[course]) {
+        Object.values(day[course]).forEach(v => {
+          raise += v.raise || 0; pick += v.pick || 0; question += v.question || 0;
+        });
+      }
+      return { raise, pick, question };
+    }
+
+    function renderSchedule() {
+      // 手机按天
+      const dayList = document.getElementById('dayList');
+      const today = new Date().toISOString().slice(0,10);
+      const dates = Object.keys(COURSE_BY_DATE).sort();
+      if (dates.length === 0) {
+        dayList.innerHTML = '<div class="empty">暂无课程</div>';
+      } else {
+        dayList.innerHTML = dates.map(date => {
+          const courses = COURSE_BY_DATE[date];
+          const d = new Date(date + 'T00:00:00');
+          const isToday = date === today;
+          return `
+            <div class="day-block">
+              <div class="day-title">${WEEKDAYS[d.getDay()]} ${d.getMonth()+1}/${d.getDate()}${isToday ? '<span class="today-tag">今天</span>' : ''}</div>
+              <div class="chips">
+                ${courses.map(c => {
+                  const counts = getCountsForChip(date, c.name);
+                  return `
+                    <div class="course-chip" onclick="enterRecord('${date}','${c.name}','${c.time}')">
+                      <div class="left">
+                        <div class="dot" style="background:${clsMap[c.cls]||'#999'}"></div>
+                        <div>
+                          <div class="name">${c.name}</div>
+                          <div class="time">${c.time}</div>
+                        </div>
+                      </div>
+                      <div class="meta">
+                        ${counts.raise ? '<span class="badge green">举 '+counts.raise+'</span>' : ''}
+                        ${counts.pick ? '<span class="badge orange">点 '+counts.pick+'</span>' : ''}
+                        ${counts.question ? '<span class="badge purple">问 '+counts.question+'</span>' : ''}
+                        <span style="color:#ccc;margin-left:4px;">›</span>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      // iPad/PC 按周
+      const grid = document.getElementById('weekGrid');
+      const start = new Date(dates[0] + 'T00:00:00');
+      start.setDate(start.getDate() - start.getDay());
+      const end = new Date(dates[dates.length-1] + 'T00:00:00');
+      while (end.getDay() !== 0) end.setDate(end.getDate() + 1);
+
+      let headHtml = '<div class="week-head">';
+      ['周日','周一','周二','周三','周四','周五','周六'].forEach(n => headHtml += `<div class="week-head-cell">${n}</div>`);
+      headHtml += '</div>';
+
+      let daysHtml = '<div class="week-days">';
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate()+1)) {
+        const k = dateKey(d);
+        const courses = COURSE_BY_DATE[k] || [];
+        const isToday = k === today;
+        const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+        daysHtml += `
+          <div class="week-day ${isWeekend?'weekend':''} ${isToday?'today':''}">
+            <div class="day-num">${d.getMonth()+1}/${d.getDate()}</div>
+            ${courses.map(c => {
+              const counts = getCountsForChip(k, c.name);
+              return `
+                <div class="week-course" style="background:${clsMap[c.cls]||'#999'}" onclick="enterRecord('${k}','${c.name}','${c.time}')">
+                  <div class="title">${c.name}</div>
+                  <div class="time">${c.time}</div>
+                  <div class="counts">举${counts.raise} 点${counts.pick} 问${counts.question}</div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      }
+      daysHtml += '</div>';
+      grid.innerHTML = headHtml + daysHtml;
+    }
+
+    function enterRecord(date, course, time) {
+      state.viewing = { date, course, time };
+      showPage('record');
+    }
+
+    function renderRecord() {
+      const { date, course, time } = state.viewing;
+      const data = getCell(date, course, state.current);
+      document.getElementById('countRaise').textContent = data.raise;
+      document.getElementById('countPick').textContent = data.pick;
+      document.getElementById('countQuestion').textContent = data.question;
+      const d = new Date(date + 'T00:00:00');
+      document.getElementById('recordContext').textContent = `${course} · ${d.getMonth()+1}/${d.getDate()} · ${time}`;
+      document.getElementById('recordStudentSub').textContent = `👤 ${state.current}`;
+    }
+
+    function add(type) {
+      const { date, course } = state.viewing;
+      const before = getCell(date, course, state.current)[type];
+      getCell(date, course, state.current)[type]++;
+      const now = before + 1;
+
+      // 查找上一次同课程同学生的记录
+      const allDates = Object.keys(state.records).filter(d => d !== date).sort();
+      let previous = 0;
+      for (let i = allDates.length - 1; i >= 0; i--) {
+        const d = allDates[i];
+        if (state.records[d][course] && state.records[d][course][state.current]) {
+          previous = state.records[d][course][state.current][type] || 0;
+          break;
+        }
+      }
+      if (now > previous) showCheer(type, state.current, course, now, previous);
+      save();
+    }
+
+    function getUsedCheers() {
+      const raw = localStorage.getItem(usedCheerKey);
+      return raw ? JSON.parse(raw) : {};
+    }
+    function setUsedCheers(obj) { localStorage.setItem(usedCheerKey, JSON.stringify(obj)); }
+
+    function showCheer(type, student, course, now, previous) {
+      const key = `${student}-${course}-${type}`;
+      const used = getUsedCheers();
+      if (!used[key]) used[key] = [];
+      const available = cheers[type].filter((_, i) => !used[key].includes(i));
+      let pick = 0;
+      if (available.length === 0) used[key] = [];
+      else pick = cheers[type].indexOf(available[Math.floor(Math.random() * available.length)]);
+      used[key].push(pick);
+      setUsedCheers(used);
+      const [emoji, text] = cheers[type][pick];
+      const labels = { raise: '主动举手', pick: '老师点名', question: '不懂就问' };
+      document.getElementById('cheerEmoji').textContent = emoji;
+      document.getElementById('cheerText').textContent = `${student}，${text} 这节课${labels[type]}${now}次，比上次多${now-previous}次！`;
+      document.getElementById('cheerToast').style.display = 'block';
+      setTimeout(hideCheer, 3500);
+    }
+    function hideCheer() { document.getElementById('cheerToast').style.display = 'none'; }
+
+    // 意图历史缓存：用户纠正后的样本
+    const intentHistoryKey = 'class-intent-history';
+    function getIntentHistory() {
+      const raw = localStorage.getItem(intentHistoryKey);
+      return raw ? JSON.parse(raw) : [];
+    }
+    function addIntentSample(text, intent) {
+      const hist = getIntentHistory();
+      // 去重：同样文本只保留最新意图
+      const filtered = hist.filter(h => h.text !== text);
+      filtered.push({ text, intent, ts: Date.now() });
+      localStorage.setItem(intentHistoryKey, JSON.stringify(filtered.slice(-100)));
+    }
+    function matchIntentByHistory(text) {
+      const hist = getIntentHistory();
+      // 简单匹配：包含关系
+      const match = hist.find(h => text.includes(h.text) || h.text.includes(text));
+      return match ? match.intent : null;
+    }
+
+    // AI 解析入口：意图路由 + 反馈学习
+    async function aiUpdate() {
+      const text = document.getElementById('aiInput').value.trim();
+      if (!text) return;
+
+      const btn = document.getElementById('aiUpdateBtn');
+      btn.disabled = true;
+      btn.textContent = '解析中...';
+
+      // 1. 先查历史意图缓存
+      let intentResult = matchIntentByHistory(text);
+
+      // 2. 没有缓存则调用后端大模型
+      if (!intentResult) {
+        if (AI_BACKEND === 'zhipu' && AI_BACKEND_URL) {
+          try {
+            const res = await fetch(AI_BACKEND_URL + '/api/parse', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                text,
+                students: state.students,
+                courses: ALL_COURSE_NAMES.concat(defaultCourses),
+                defaultCourse: state.viewing.course,
+                defaultDate: state.viewing.date
+              })
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            intentResult = data;
+            if (data.provider) {
+              document.getElementById('aiMode').textContent = data.provider === 'kimi' ? 'Kimi 大模型' : '智谱大模型';
+            }
+          } catch (e) {
+            // 后端失败，用本地解析作为 fallback
+            const records = parseLocal(text);
+            intentResult = { intent: records && records.length ? 'update' : 'unknown', records };
+          }
+        } else {
+          const records = parseLocal(text);
+          intentResult = { intent: records && records.length ? 'update' : 'unknown', records };
+        }
+      }
+
+      // 本地解析 fallback
+      if (intentResult.intent === 'unknown' || (!intentResult.intent && intentResult.records && intentResult.records.length)) {
+        const records = intentResult.records || parseLocal(text);
+        const addRecords = records.filter(r => r.intent === 'add');
+        const updateRecords = records.filter(r => r.intent !== 'add');
+        if (addRecords.length > 0 && updateRecords.length === 0) {
+          intentResult = { intent: 'add', records: addRecords };
+        } else if (updateRecords.length > 0 && addRecords.length === 0) {
+          intentResult = { intent: 'update', records: updateRecords };
+        } else if (records.length > 0) {
+          // 混合情况，先执行 add，再执行 update
+          applyRecords(addRecords, '增量记录', true);
+          applyRecords(updateRecords, '直接记录', false);
+          btn.disabled = false;
+          btn.textContent = '让大模型更新数据';
+          setTimeout(() => askFeedback(text, 'update', '已混合执行增量和直接记录'), 300);
+          return;
+        } else {
+          intentResult = { intent: 'unknown' };
+        }
+      }
+
+      btn.disabled = false;
+      btn.textContent = '让大模型更新数据';
+
+      // 3. 意图路由执行
+      routeIntent(text, intentResult);
+    }
+
+    function routeIntent(text, result) {
+      const intent = result.intent || 'unknown';
+      const description = result.description || '';
+      const params = result.parameters || {};
+      const records = result.records || [];
+
+      switch (intent) {
+        case 'update':
+        case 'add':
+          applyRecords(records, description, intent === 'add');
+          break;
+        case 'reset':
+        case 'set':
+          applyAction({ op: intent, ...params }, description);
+          break;
+        case 'delete':
+          applyDelete(params, description);
+          break;
+        case 'query':
+          applyQuery(params, description);
+          break;
+        case 'summary':
+          applySummary(params, description);
+          break;
+        default:
+          askFeedback(text, 'unknown', '我没理解你的意思，能再说一次吗？');
+          return;
+      }
+
+      // 执行成功后询问反馈
+      setTimeout(() => askFeedback(text, intent, description), 300);
+    }
+
+    function askFeedback(text, intent, description) {
+      const ok = confirm(`我理解的是：${description || intent}\n\n对吗？`);
+      if (ok) {
+        addIntentSample(text, intent);
+      } else {
+        const options = ['update-记录表现', 'add-加次数', 'reset-重置', 'set-设置数值', 'delete-删除', 'query-查询', 'summary-总结', 'unknown-无法理解'];
+        const choice = prompt(`请告诉我正确的意图：\n${options.join('\n')}\n\n输入关键词（如 update）：`, 'update');
+        if (choice) {
+          const correctIntent = choice.split('-')[0].trim();
+          addIntentSample(text, correctIntent);
+          alert('已记录你的反馈，下次会优先按这个意图理解。');
+        }
+      }
+      document.getElementById('aiInput').value = '';
+    }
+
+    function applyRecords(records, description, isAdd = false) {
+      if (!records || records.length === 0) {
+        alert('没能识别，请试试："今天英语课小明主动举手3次，老师点名2次，不懂问了1次" 或 "今天英语课主动举手加一次"');
+        return;
+      }
+      records.forEach(r => {
+        const cell = getCell(r.date, r.course, r.student);
+        if (r.raise) {
+          if (isAdd) cell.raise += parseInt(r.raise, 10);
+          else cell.raise = parseInt(r.raise, 10);
+        }
+        if (r.pick) {
+          if (isAdd) cell.pick += parseInt(r.pick, 10);
+          else cell.pick = parseInt(r.pick, 10);
+        }
+        if (r.question) {
+          if (isAdd) cell.question += parseInt(r.question, 10);
+          else cell.question = parseInt(r.question, 10);
+        }
+      });
+      state.viewing.date = records[0].date;
+      state.viewing.course = records[0].course;
+      const courseEvent = COURSE_EVENTS.find(e => e.name === records[0].course && dateKey(e.date) === records[0].date);
+      if (courseEvent) state.viewing.time = courseEvent.time;
+      save();
+      alert(description ? `已更新 ${records.length} 条记录：${description}` : `已更新 ${records.length} 条记录！`);
+    }
+
+    function parseLocal(text) {
+      let date = state.viewing.date;
+      const today = new Date();
+      const y = today.getFullYear();
+      if (text.includes('今天')) date = `${y}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+      else if (text.includes('昨天')) { const d = new Date(today); d.setDate(d.getDate()-1); date = `${y}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+      else {
+        const m1 = text.match(/(\d{1,2})\/(\d{1,2})/);
+        if (m1) date = `${y}-${m1[1].padStart(2,'0')}-${m1[2].padStart(2,'0')}`;
+        else {
+          const m2 = text.match(/(\d{1,2})[月\.](\d{1,2})[日号]?/);
+          if (m2) date = `${y}-${m2[1].padStart(2,'0')}-${m2[2].padStart(2,'0')}`;
+        }
+      }
+
+      const allCourses = [...new Set([...ALL_COURSE_NAMES, ...defaultCourses])].sort((a,b)=>b.length-a.length);
+      const records = [];
+      const rawSentences = text.split(/[;；。!！?？\n]/).filter(Boolean).map(s => s.trim()).filter(Boolean);
+      let lastCourse = state.viewing.course;
+
+      rawSentences.forEach(sentence => {
+        let course = null;
+        for (const c of allCourses) {
+          if (sentence.includes(c)) { course = c; break; }
+        }
+        if (!course) course = lastCourse;
+        else lastCourse = course;
+
+        const namePositions = [];
+        state.students.forEach(name => {
+          let idx = sentence.indexOf(name);
+          while (idx !== -1) {
+            namePositions.push({ idx, name });
+            idx = sentence.indexOf(name, idx + 1);
+          }
+        });
+        namePositions.sort((a,b) => a.idx - b.idx);
+
+        for (let i = 0; i < namePositions.length; i++) {
+          const { idx, name } = namePositions[i];
+          const start = idx + name.length;
+          const end = i < namePositions.length - 1 ? namePositions[i+1].idx : sentence.length;
+          const chunk = sentence.slice(start, end);
+          const recs = parseStudentChunk(chunk, name, date, course);
+          records.push(...recs);
+        }
+      });
+
+      return records;
+    }
+
+    function parseStudentChunk(chunk, student, date, course) {
+      const records = [];
+      const parts = chunk.split(/[,，]/).filter(Boolean).map(s => s.trim()).filter(Boolean);
+      parts.forEach(part => {
+        // 增量表达：加一次 / 再加一次 / 加1次 / 多一次 / 增加一次
+        const isAdd = /(加|增加|多)\s*(一|1|二|2|三|3|四|4|五|5|几|\d+)?\s*(次|个|遍|回|道|题)?/.test(part);
+        const addMatch = part.match(/(加|增加|多)\s*(一|1|二|2|三|3|四|4|五|5|几|\d+)?\s*(次|个|遍|回|道|题)?/);
+        let addValue = 1;
+        if (addMatch && addMatch[2]) {
+          const v = addMatch[2];
+          if (/[一二三四五]/.test(v)) {
+            const map = {'一':1,'二':2,'三':3,'四':4,'五':5};
+            addValue = map[v] || 1;
+          } else {
+            addValue = parseInt(v, 10) || 1;
+          }
+        }
+
+        const numMatches = [...part.matchAll(/(\d+)[\s\w]*?(次|个|遍|回|道|题)?/g)];
+        if (numMatches.length === 0 && !isAdd) return;
+
+        if (isAdd && numMatches.length === 0) {
+          const type = inferType(part);
+          records.push({ date, course, student, intent: 'add', [type]: addValue });
+          return;
+        }
+
+        if (numMatches.length === 1) {
+          const n = isAdd ? addValue : parseInt(numMatches[0][1], 10);
+          const type = inferType(part);
+          records.push({ date, course, student, intent: isAdd ? 'add' : 'update', [type]: n });
+          return;
+        }
+
+        numMatches.forEach(m => {
+          const n = isAdd ? addValue : parseInt(m[1], 10);
+          const idx = m.index;
+          const segment = part.slice(Math.max(0, idx - 8), Math.min(part.length, idx + 12));
+          const type = inferType(segment + ' ' + part);
+          records.push({ date, course, student, intent: isAdd ? 'add' : 'update', [type]: n });
+        });
+      });
+      return records;
+    }
+
+    function inferType(text) {
+      const t = text.toLowerCase();
+      const questionKw = ['不懂', '问', '不会', '求助', '难题', '疑问', '提问', '问题', '没懂', '没明白', '请教'];
+      const pickKw = ['点名', '老师点', '被点', '叫', '提问到', '老师叫到', '被叫到'];
+      const raiseKw = ['举手', '主动', '回答', '发言', '抢答', '答了', '答对', '答错', '站起来', '参与'];
+
+      const qIdx = questionKw.map(k => t.indexOf(k)).filter(i => i !== -1);
+      const pIdx = pickKw.map(k => t.indexOf(k)).filter(i => i !== -1);
+      const rIdx = raiseKw.map(k => t.indexOf(k)).filter(i => i !== -1);
+
+      const qMin = qIdx.length ? Math.min(...qIdx) : 999;
+      const pMin = pIdx.length ? Math.min(...pIdx) : 999;
+      const rMin = rIdx.length ? Math.min(...rIdx) : 999;
+
+      const min = Math.min(qMin, pMin, rMin);
+      if (min === 999) return 'raise';
+      if (min === qMin) return 'question';
+      if (min === pMin) return 'pick';
+      return 'raise';
+    }
+
+    function applyAction({ op, field = 'all', scope = 'all', value = 0, date, course, student }, description) {
+      if (!op) {
+        alert('无法识别该操作指令');
+        return;
+      }
+      let changed = 0;
+      const fields = field === 'all' ? ['raise', 'pick', 'question'] : [field];
+      Object.entries(state.records).forEach(([d, day]) => {
+        if (scope === 'date' && date && d !== date && date !== 'all') return;
+        Object.entries(day).forEach(([c, crs]) => {
+          if (scope === 'course' && course && c !== course) return;
+          Object.entries(crs).forEach(([s, cell]) => {
+            if (scope === 'student' && student && s !== student) return;
+            fields.forEach(f => {
+              if (op === 'reset' || op === 'set') {
+                cell[f] = parseInt(value, 10) || 0;
+              } else if (op === 'add') {
+                cell[f] += parseInt(value, 10) || 0;
+              }
+              changed++;
+            });
+          });
+        });
+      });
+      save();
+      alert(description ? `已执行：${description}（影响 ${changed} 项）` : `已执行 ${op} 操作，影响 ${changed} 个数据项`);
+    }
+
+    function applyDelete(params, description) {
+      const { date, course, student } = params || {};
+      if (!date && !course && !student) {
+        alert('删除范围太广，请指定日期、课程或学生');
+        return;
+      }
+      let changed = 0;
+      Object.entries(state.records).forEach(([d, day]) => {
+        if (date && d !== date) return;
+        Object.entries(day).forEach(([c, crs]) => {
+          if (course && c !== course) return;
+          Object.entries(crs).forEach(([s, cell]) => {
+            if (student && s !== student) return;
+            cell.raise = 0;
+            cell.pick = 0;
+            cell.question = 0;
+            changed++;
+          });
+        });
+      });
+      save();
+      alert(description ? `已删除：${description}（影响 ${changed} 项）` : `已删除 ${changed} 条记录`);
+    }
+
+    function applyQuery(params, description) {
+      const { date, course, student, field = 'raise', scope = 'all' } = params || {};
+      let result = [];
+      Object.entries(state.records).forEach(([d, day]) => {
+        if (scope === 'date' && date && d !== date && date !== 'all') return;
+        Object.entries(day).forEach(([c, crs]) => {
+          if (course && c !== course) return;
+          Object.entries(crs).forEach(([s, cell]) => {
+            if (student && s !== student) return;
+            const val = cell[field] || 0;
+            if (val > 0) result.push({ date: d, course: c, student: s, [field]: val });
+          });
+        });
+      });
+      const total = result.reduce((sum, r) => sum + (r[field] || 0), 0);
+      const msg = description ? `查询结果：${description}\n共 ${total} 次\n\n详情：\n` : `查询结果：共 ${total} 次\n\n详情：\n`;
+      alert(msg + result.slice(0, 20).map(r => `${r.date} ${r.course} ${r.student}: ${r[field]}`).join('\n'));
+    }
+
+    function applySummary(params, description) {
+      const { scope = 'week', student } = params || {};
+      let result = {};
+      Object.entries(state.records).forEach(([d, day]) => {
+        const dd = new Date(d + 'T00:00:00');
+        const key = scope === 'month' ? d.slice(0,7) : getWeekRange(d).start.toISOString().slice(0,10);
+        Object.entries(day).forEach(([c, crs]) => {
+          Object.entries(crs).forEach(([s, cell]) => {
+            if (student && s !== student) return;
+            if (!result[s]) result[s] = { raise: 0, pick: 0, question: 0 };
+            result[s].raise += cell.raise || 0;
+            result[s].pick += cell.pick || 0;
+            result[s].question += cell.question || 0;
+          });
+        });
+      });
+      const rows = Object.entries(result).filter(([,v]) => v.raise+v.pick+v.question > 0)
+        .sort((a,b) => (b[1].raise+b[1].pick+b[1].question) - (a[1].raise+a[1].pick+a[1].question));
+      const msg = description ? `总结：${description}\n\n` : `总结：\n`;
+      alert(msg + rows.map(([name, v]) => `${name}: 举手${v.raise} 点名${v.pick} 提问${v.question}`).join('\n'));
+    }
+
+
+    // 语音输入（Web Speech API）
+    let recognition = null;
+    function initVoice() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        alert('当前浏览器不支持语音输入，请用 Chrome 或 Safari。');
+        return null;
+      }
+      const r = new SpeechRecognition();
+      r.lang = 'zh-CN';
+      r.continuous = false;
+      r.interimResults = false;
+      r.onresult = (e) => {
+        const text = e.results[0][0].transcript;
+        document.getElementById('aiInput').value += (document.getElementById('aiInput').value ? ' ' : '') + text;
+      };
+      r.onerror = (e) => console.log('voice error', e);
+      r.onend = () => {
+        const btn = document.getElementById('voiceBtn');
+        btn.classList.remove('listening');
+        btn.textContent = '🎙️ 按住说话';
+      };
+      return r;
+    }
+    function toggleVoice() {
+      if (!recognition) recognition = initVoice();
+      if (!recognition) return;
+      const btn = document.getElementById('voiceBtn');
+      if (btn.classList.contains('listening')) {
+        recognition.stop();
+      } else {
+        btn.classList.add('listening');
+        btn.textContent = '🔴 正在听...';
+        recognition.start();
+      }
+    }
+
+    // 切换 AI 模式：本地 / 智谱后端
+    function setAiMode(mode, backendUrl) {
+      localStorage.setItem(aiBackendKey, mode);
+      if (backendUrl) localStorage.setItem(aiBackendKey + '-url', backendUrl);
+      location.reload();
+    }
+    function openAiConfig() {
+      document.getElementById('aiConfigMode').value = AI_BACKEND;
+      document.getElementById('aiConfigUrl').value = AI_BACKEND_URL;
+      document.getElementById('aiConfigModal').style.display = 'flex';
+    }
+    function closeAiConfig() { document.getElementById('aiConfigModal').style.display = 'none'; }
+    function saveAiConfig() {
+      const mode = document.getElementById('aiConfigMode').value;
+      let url = document.getElementById('aiConfigUrl').value.trim();
+      if (url && url.endsWith('/')) url = url.slice(0, -1);
+      setAiMode(mode, url);
+    }
+    document.getElementById('aiMode').textContent = AI_BACKEND === 'zhipu' ? '智谱大模型' : '本地模拟';
+    if (AI_BACKEND === 'zhipu' && AI_BACKEND_URL) {
+      document.getElementById('aiBackendUrl').textContent = ' · ' + AI_BACKEND_URL;
+    }
+
+    function getWeekRange(date) {
+      const d = new Date(date + 'T00:00:00');
+      const day = d.getDay();
+      const start = new Date(d); start.setDate(d.getDate() - day);
+      const end = new Date(start); end.setDate(start.getDate() + 6);
+      return { start, end };
+    }
+    function sameWeek(d1, d2) {
+      return getWeekRange(d1).start.toDateString() === getWeekRange(d2).start.toDateString();
+    }
+    const ALL_COURSE_NAMES = [...new Set(COURSE_EVENTS.map(e => e.name))].sort();
+
+    function populateCourseFilters() {
+      const opts = ALL_COURSE_NAMES.map(c => `<option value="${c}">${c}</option>`).join('');
+      document.getElementById('weekCourseFilter').innerHTML = '<option value="">全部课程</option>' + opts;
+      document.getElementById('monthCourseFilter').innerHTML = '<option value="">全部课程</option>' + opts;
+    }
+
+    function aggregateByStudent(filterFn, courseFilter) {
+      const result = {};
+      state.students.forEach(s => result[s] = { raise: 0, pick: 0, question: 0 });
+      Object.entries(state.records).forEach(([date, day]) => {
+        if (!filterFn(date)) return;
+        Object.entries(day).forEach(([courseName, course]) => {
+          if (courseFilter && courseName !== courseFilter) return;
+          Object.entries(course).forEach(([student, v]) => {
+            if (!result[student]) result[student] = { raise: 0, pick: 0, question: 0 };
+            result[student].raise += v.raise || 0;
+            result[student].pick += v.pick || 0;
+            result[student].question += v.question || 0;
+          });
+        });
+      });
+      return result;
+    }
+
+    let summaryState = { week: new Date().toISOString().slice(0,10), month: new Date().toISOString().slice(0,7), selectedDay: null, weekCourse: '', monthCourse: '' };
+
+    function setWeekCourse(c) { summaryState.weekCourse = c; renderSummary(); }
+    function setMonthCourse(c) { summaryState.monthCourse = c; renderSummary(); }
+
+    function getDayTotals(date, courseFilter) {
+      const result = { raise: 0, pick: 0, question: 0 };
+      const day = state.records[date];
+      if (!day) return result;
+      Object.entries(day).forEach(([courseName, course]) => {
+        if (courseFilter && courseName !== courseFilter) return;
+        Object.values(course).forEach(student => {
+          result.raise += student.raise || 0;
+          result.pick += student.pick || 0;
+          result.question += student.question || 0;
+        });
+      });
+      return result;
+    }
+
+    function renderDayDetail(date, containerId, courseFilter) {
+      const el = document.getElementById(containerId);
+      const day = state.records[date];
+      if (!day) {
+        el.style.display = 'none';
+        return;
+      }
+      const d = new Date(date + 'T00:00:00');
+      let html = `<h4>${WEEKDAYS[d.getDay()]} ${d.getMonth()+1}/${d.getDate()} 详情</h4>`;
+      let courses = Object.entries(day);
+      if (courseFilter) courses = courses.filter(([n]) => n === courseFilter);
+      if (courses.length === 0) { el.style.display = 'none'; return; }
+      courses.forEach(([courseName, students]) => {
+        const rows = Object.entries(students).filter(([,v]) => v.raise + v.pick + v.question > 0);
+        if (rows.length === 0) return;
+        html += `<div class="detail-row"><div><b>${courseName}</b></div><div>${rows.map(([name, v]) => `${name}: 举${v.raise} 点${v.pick} 问${v.question}`).join('， ')}</div></div>`;
+      });
+      el.innerHTML = html;
+      el.style.display = 'block';
+    }
+
+    function renderWeekCalendar() {
+      const range = getWeekRange(summaryState.week);
+      const cf = summaryState.weekCourse;
+      document.getElementById('weekNavTitle').textContent = `${cf ? cf + ' - ' : ''}${range.start.getMonth()+1}/${range.start.getDate()} - ${range.end.getMonth()+1}/${range.end.getDate()}`;
+      const grid = document.getElementById('weekCalendar');
+      let html = '';
+      ['日','一','二','三','四','五','六'].forEach(n => html += `<div class="summary-calendar-head">周${n}</div>`);
+      for (let d = new Date(range.start); d <= range.end; d.setDate(d.getDate()+1)) {
+        const k = dateKey(d);
+        const t = getDayTotals(k, cf);
+        const total = t.raise + t.pick + t.question;
+        const today = k === new Date().toISOString().slice(0,10);
+        html += `
+          <div class="summary-calendar-cell ${today?'today':''}" onclick="showDayDetail('${k}','week')">
+            <div class="day">${d.getMonth()+1}/${d.getDate()}</div>
+            <div class="total">${total || '-'}</div>
+            <div class="sub">${t.raise} · ${t.pick} · ${t.question}</div>
+          </div>`;
+      }
+      grid.innerHTML = html;
+    }
+
+    function renderMonthCalendar() {
+      const [y, m] = summaryState.month.split('-').map(Number);
+      const cf = summaryState.monthCourse;
+      const first = new Date(y, m-1, 1);
+      const start = new Date(first); start.setDate(start.getDate() - start.getDay());
+      const last = new Date(y, m, 0);
+      const end = new Date(last); while (end.getDay() !== 0) end.setDate(end.getDate()+1);
+      document.getElementById('monthNavTitle').textContent = `${cf ? cf + ' - ' : ''}${y}年${m}月`;
+      const grid = document.getElementById('monthCalendar');
+      let html = '';
+      ['日','一','二','三','四','五','六'].forEach(n => html += `<div class="summary-calendar-head">周${n}</div>`);
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate()+1)) {
+        const k = dateKey(d);
+        const t = getDayTotals(k, cf);
+        const total = t.raise + t.pick + t.question;
+        const inMonth = d.getMonth() === m-1;
+        const today = k === new Date().toISOString().slice(0,10);
+        if (!inMonth) {
+          html += `<div class="summary-calendar-cell empty"></div>`;
+        } else {
+          html += `
+            <div class="summary-calendar-cell ${today?'today':''}" onclick="showDayDetail('${k}','month')">
+              <div class="day">${d.getDate()}</div>
+              <div class="total">${total || '-'}</div>
+              <div class="sub">${t.raise} · ${t.pick} · ${t.question}</div>
+            </div>`;
+        }
+      }
+      grid.innerHTML = html;
+    }
+
+    function showDayDetail(date, type) {
+      summaryState.selectedDay = date;
+      const cf = type === 'week' ? summaryState.weekCourse : summaryState.monthCourse;
+      renderDayDetail(date, type === 'week' ? 'weekDetail' : 'monthDetail', cf);
+    }
+
+    function shiftWeek(n) {
+      const d = new Date(summaryState.week + 'T00:00:00');
+      d.setDate(d.getDate() + n * 7);
+      summaryState.week = d.toISOString().slice(0,10);
+      document.getElementById('weekDetail').style.display = 'none';
+      renderSummary();
+    }
+
+    function shiftMonth(n) {
+      const [y, m] = summaryState.month.split('-').map(Number);
+      const d = new Date(y, m-1 + n, 1);
+      summaryState.month = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      document.getElementById('monthDetail').style.display = 'none';
+      renderSummary();
+    }
+
+    function showSummaryTab(name) {
+      document.querySelectorAll('.summary-page').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.summary-tab').forEach(t => t.classList.remove('active'));
+      document.getElementById('summary-' + name).classList.add('active');
+      event.target.classList.add('active');
+      renderSummary();
+    }
+
+    function renderSummary() {
+      const weekInput = summaryState.week;
+      const monthInput = summaryState.month;
+      const weekCourse = summaryState.weekCourse;
+      const monthCourse = summaryState.monthCourse;
+
+      renderWeekCalendar();
+      renderMonthCalendar();
+      if (summaryState.selectedDay) {
+        const activeWeek = document.getElementById('summary-week').classList.contains('active');
+        renderDayDetail(summaryState.selectedDay, activeWeek ? 'weekDetail' : 'monthDetail', activeWeek ? weekCourse : monthCourse);
+      }
+
+      const weekly = aggregateByStudent(d => sameWeek(d, weekInput), weekCourse);
+      const weeklyRows = Object.entries(weekly).filter(([,v]) => v.raise+v.pick+v.question > 0).sort((a,b) => (b[1].raise+b[1].pick+b[1].question) - (a[1].raise+a[1].pick+a[1].question));
+      const curWeekRange = getWeekRange(weekInput);
+      const lastWeekStart = new Date(curWeekRange.start); lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+      const lastWeekEnd = new Date(curWeekRange.end); lastWeekEnd.setDate(lastWeekEnd.getDate() - 7);
+      const lastWeek = aggregateByStudent(d => {
+        const dd = new Date(d + 'T00:00:00');
+        return dd >= lastWeekStart && dd <= lastWeekEnd;
+      }, weekCourse);
+      document.getElementById('weeklyTitle').textContent = `${weekCourse ? weekCourse + ' ' : '📊 '}${curWeekRange.start.getMonth()+1}/${curWeekRange.start.getDate()} - ${curWeekRange.end.getMonth()+1}/${curWeekRange.end.getDate()} 周总结`;
+
+      const weeklyEl = document.getElementById('weeklySummary');
+      if (weeklyRows.length === 0) {
+        weeklyEl.innerHTML = '<div class="empty">该周还没有记录</div>';
+      } else {
+        const total = weeklyRows.reduce((s,[,v]) => s + v.raise + v.pick + v.question, 0);
+        weeklyEl.innerHTML = `
+          <div class="summary-grid">
+            <div class="summary-card"><div class="val">${total}</div><div class="lab">总参与次数</div></div>
+            <div class="summary-card"><div class="val">${weeklyRows.reduce((s,[,v])=>s+v.raise,0)}</div><div class="lab">主动举手</div></div>
+            <div class="summary-card"><div class="val">${weeklyRows.reduce((s,[,v])=>s+v.pick,0)}</div><div class="lab">老师点名</div></div>
+            <div class="summary-card"><div class="val">${weeklyRows.reduce((s,[,v])=>s+v.question,0)}</div><div class="lab">不懂就问</div></div>
+          </div>
+          <table class="summary-table">
+            <tr><th>小朋友</th><th>主动举手</th><th>老师点名</th><th>不懂就问</th><th>趋势</th></tr>
+            ${weeklyRows.map(([name, v]) => {
+              const lw = lastWeek[name] || { raise: 0, pick: 0, question: 0 };
+              const curTotal = v.raise + v.pick + v.question, lwTotal = lw.raise + lw.pick + lw.question;
+              let trend = '<span class="trend">-</span>';
+              if (lwTotal > 0) {
+                const diff = curTotal - lwTotal;
+                const pct = Math.round((diff / lwTotal) * 100);
+                trend = diff > 0 ? `<span class="trend up">↗ +${pct}%</span>` : diff < 0 ? `<span class="trend down">↘ ${pct}%</span>` : '<span class="trend">→ 持平</span>';
+              } else if (curTotal > 0) trend = '<span class="trend up">↗ 新记录</span>';
+              return `<tr><td><b>${name}</b></td><td>${v.raise}</td><td>${v.pick}</td><td>${v.question}</td><td>${trend}</td></tr>`;
+            }).join('')}
+          </table>
+        `;
+      }
+
+      const monthly = aggregateByStudent(d => d.slice(0,7) === monthInput, monthCourse);
+      const monthlyRows = Object.entries(monthly).filter(([,v]) => v.raise+v.pick+v.question > 0).sort((a,b) => (b[1].raise+b[1].pick+b[1].question) - (a[1].raise+a[1].pick+a[1].question));
+      const lastMonthDate = new Date(monthInput + '-01T00:00:00');
+      lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+      const lastMonthKey = lastMonthDate.toISOString().slice(0,7);
+      const lastMonth = aggregateByStudent(d => d.slice(0,7) === lastMonthKey, monthCourse);
+      const [y, m] = monthInput.split('-').map(Number);
+      document.getElementById('monthlyTitle').textContent = `${monthCourse || '📈'} ${y}年${m}月总结`.replace(/^ 📈/, '📈');
+
+      const monthlyEl = document.getElementById('monthlySummary');
+      if (monthlyRows.length === 0) {
+        monthlyEl.innerHTML = '<div class="empty">该月还没有记录</div>';
+      } else {
+        const total = monthlyRows.reduce((s,[,v]) => s + v.raise + v.pick + v.question, 0);
+        monthlyEl.innerHTML = `
+          <div class="summary-grid">
+            <div class="summary-card"><div class="val">${total}</div><div class="lab">总参与次数</div></div>
+            <div class="summary-card"><div class="val">${monthlyRows.reduce((s,[,v])=>s+v.raise,0)}</div><div class="lab">主动举手</div></div>
+            <div class="summary-card"><div class="val">${monthlyRows.reduce((s,[,v])=>s+v.pick,0)}</div><div class="lab">老师点名</div></div>
+            <div class="summary-card"><div class="val">${monthlyRows.reduce((s,[,v])=>s+v.question,0)}</div><div class="lab">不懂就问</div></div>
+          </div>
+          <table class="summary-table">
+            <tr><th>小朋友</th><th>主动举手</th><th>老师点名</th><th>不懂就问</th><th>较上月</th></tr>
+            ${monthlyRows.map(([name, v]) => {
+              const lm = lastMonth[name] || { raise: 0, pick: 0, question: 0 };
+              const curTotal = v.raise + v.pick + v.question, lmTotal = lm.raise + lm.pick + lm.question;
+              let trend = '<span class="trend">-</span>';
+              if (lmTotal > 0) {
+                const diff = curTotal - lmTotal;
+                const pct = Math.round((diff / lmTotal) * 100);
+                trend = diff > 0 ? `<span class="trend up">↗ +${pct}%</span>` : diff < 0 ? `<span class="trend down">↘ ${pct}%</span>` : '<span class="trend">→ 持平</span>';
+              } else if (curTotal > 0) trend = '<span class="trend up">↗ 新记录</span>';
+              return `<tr><td><b>${name}</b></td><td>${v.raise}</td><td>${v.pick}</td><td>${v.question}</td><td>${trend}</td></tr>`;
+            }).join('')}
+          </table>
+        `;
+      }
+    }
+
+    function showPage(name) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.getElementById('page-' + name).classList.add('active');
+      event.target.classList.add('active');
+      if (name === 'schedule') renderSchedule();
+      if (name === 'record') renderRecord();
+      if (name === 'summary') renderSummary();
+    }
+
+    function openStudentModal() {
+      document.getElementById('studentNames').value = state.students.join(',');
+      document.getElementById('studentModal').style.display = 'flex';
+    }
+    function closeModal() { document.getElementById('studentModal').style.display = 'none'; }
+    function saveStudents() {
+      const names = document.getElementById('studentNames').value.split(',').map(s => s.trim()).filter(Boolean);
+      if (names.length) {
+        state.students = names;
+        if (!state.students.includes(state.current)) state.current = state.students[0];
+        renderStudentSelect();
+        save();
+      }
+      closeModal();
+    }
+
+    load();
+  </script>
+</body>
+</html>
