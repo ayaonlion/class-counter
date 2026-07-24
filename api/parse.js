@@ -74,31 +74,31 @@ export default async function handler(req, res) {
 
 用户输入："""${text}"""`;
 
-  // 1. 优先尝试 Kimi
-  if (KIMI_API_KEY) {
+  const PRIMARY_PROVIDER = (process.env.PRIMARY_PROVIDER || 'zhipu').toLowerCase();
+
+  // 根据 PRIMARY_PROVIDER 环境变量决定优先使用哪个模型（默认 zhipu），无需改代码即可切换
+  const providers = PRIMARY_PROVIDER === 'kimi' ? [
+    { name: 'kimi', key: KIMI_API_KEY, call: callKimi },
+    { name: 'zhipu', key: ZHIPU_API_KEY, call: callZhipu }
+  ] : [
+    { name: 'zhipu', key: ZHIPU_API_KEY, call: callZhipu },
+    { name: 'kimi', key: KIMI_API_KEY, call: callKimi }
+  ];
+
+  let lastError = null;
+  for (const provider of providers) {
+    if (!provider.key) continue;
     try {
-      const result = await callKimi(KIMI_API_KEY, prompt);
+      const result = await provider.call(provider.key, prompt);
       const parsed = await parseAndFilter(result, students, courses);
-      return res.json({ provider: 'kimi', ...parsed });
+      return res.json({ provider: provider.name, ...parsed });
     } catch (err) {
-      if (!ZHIPU_API_KEY) {
-        return res.status(500).json({ error: 'Kimi 调用失败，且未配置智谱 Key', detail: err.message });
-      }
+      lastError = err;
+      continue;
     }
   }
 
-  // 2. 尝试智谱
-  if (ZHIPU_API_KEY) {
-    try {
-      const result = await callZhipu(ZHIPU_API_KEY, prompt);
-      const parsed = await parseAndFilter(result, students, courses);
-      return res.json({ provider: 'zhipu', ...parsed });
-    } catch (err) {
-      return res.status(500).json({ error: '智谱调用失败', detail: err.message });
-    }
-  }
-
-  res.status(500).json({ error: '无可用大模型' });
+  return res.status(500).json({ error: '所有可用大模型调用失败', detail: lastError?.message || '无可用模型' });
 }
 
 async function callKimi(apiKey, prompt) {
