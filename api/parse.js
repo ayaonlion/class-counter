@@ -1,22 +1,64 @@
-// Vercel Serverless Function: /api/parse
-// 同时支持 Kimi 和智谱 GLM 大模型，优先尝试 Kimi，失败时自动切换到智谱
-// 升级为意图路由模式：识别用户意图，返回结构化操作指令
-export default async function handler(req, res) {
+// Vercel Edge Function: /api/parse
+// 使用 Edge Runtime 获得 30 秒超时，避免 Serverless 10 秒超时
+// 同时支持 Kimi 和智谱 GLM 大模型，通过环境变量 PRIMARY_PROVIDER 控制优先级
+
+export const config = {
+  runtime: 'edge'
+};
+
+export default async function handler(req) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: '只支持 POST' });
+    return jsonResponse(405, { error: '只支持 POST' });
   }
+
+  const start = Date.now();
+  const { text, students, courses, defaultCourse, defaultDate } = await req.json();
+  if (!text) return jsonResponse(400, { error: '缺少 text 参数' });
 
   const KIMI_API_KEY = process.env.KIMI_API_KEY;
   const ZHIPU_API_KEY = process.env.ZHIPU_API_KEY;
+  const PRIMARY_PROVIDER = (process.env.PRIMARY_PROVIDER || 'zhipu').toLowerCase();
 
   if (!KIMI_API_KEY && !ZHIPU_API_KEY) {
-    return res.status(500).json({ error: '未配置 KIMI_API_KEY 或 ZHIPU_API_KEY 环境变量' });
+    return jsonResponse(500, { error: '未配置 KIMI_API_KEY 或 ZHIPU_API_KEY 环境变量' });
   }
 
-  const { text, students, courses, defaultCourse, defaultDate, history } = req.body;
-  if (!text) return res.status(400).json({ error: '缺少 text 参数' });
+  const prompt = buildPrompt({ text, students, courses, defaultCourse, defaultDate });
 
-  const prompt = `你是一位课堂记录助手。请理解用户意图，并返回严格 JSON 格式。
+  const providers = PRIMARY_PROVIDER === 'kimi' ? [
+    { name: 'kimi', key: KIMI_API_KEY, call: callKimi },
+    { name: 'zhipu', key: ZHIPU_API_KEY, call: callZhipu }
+  ] : [
+    { name: 'zhipu', key: ZHIPU_API_KEY, call: callZhipu },
+    { name: 'kimi', key: KIMI_API_KEY, call: callKimi }
+  ];
+
+  let lastError = null;
+  for (const provider of providers) {
+    if (!provider.key) continue;
+    try {
+      const content = await provider.call(provider.key, prompt);
+      const parsed = parseAndFilter(content, students, courses);
+      const total = Date.now() - start;
+      return jsonResponse(200, { provider: provider.name, elapsed_ms: total, ...parsed });
+    } catch (err) {
+      lastError = err;
+      continue;
+    }
+  }
+
+  return jsonResponse(500, { error: '所有可用大模型调用失败', detail: lastError?.message || '无可用模型' });
+}
+
+function jsonResponse(status, body) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' }
+  });
+}
+
+function buildPrompt({ text, students, courses, defaultCourse, defaultDate }) {
+  return `你是一位课堂记录助手。请理解用户意图，并返回严格 JSON 格式。
 
 支持的学生：${(students || []).join('、')}
 支持的课程：${(courses || []).join('、')}
@@ -36,7 +78,6 @@ export default async function handler(req, res) {
     "scope": "all|date|course|student"
   },
   "records": [
-    // update/add/subtract 意图需要；add/subtract 表示在现有基础上增加/减少
     {"date": "2026-07-24", "course": "英语(殷)", "student": "小明", "raise": 1, "pick": 0, "question": 0}
   ]
 }
@@ -57,48 +98,9 @@ export default async function handler(req, res) {
 - pick: 老师点名 / 点名 / 被点到 / 老师叫到
 - question: 不懂就问 / 提问 / 问问题 / 不会 / 问了 / 求助
 
-示例：
-- "今天英语课举手3次" → update, records: [{"raise":3}]
-- "今天英语课举手加一次" → add, records: [{"raise":1}]
-- "今天英语课举手+1次" → add, records: [{"raise":1}]
-- "今天英语课举手多一次" → add, records: [{"raise":1}]
-- "今天英语课举手再来一次" → add, records: [{"raise":1}]
-- "今天英语课举手翻倍" → add, records: [{"raise":2}]
-- "昨天语文课老师点名加一次" → add, records: [{"pick":1}]
-- "数学课不懂的问加两次" → add, records: [{"question":2}]
-- "今天英语课举手减一次" → subtract, records: [{"raise":1}]
-- "把今天英语课举手次数设为5" → set, parameters: {"value":5}
-- "重置所有主动举手次数" → reset, parameters: {"field":"raise", "scope":"all"}
-
 只返回 JSON，不要任何解释文字。
 
 用户输入："""${text}"""`;
-
-  const PRIMARY_PROVIDER = (process.env.PRIMARY_PROVIDER || 'zhipu').toLowerCase();
-
-  // 根据 PRIMARY_PROVIDER 环境变量决定优先使用哪个模型（默认 zhipu），无需改代码即可切换
-  const providers = PRIMARY_PROVIDER === 'kimi' ? [
-    { name: 'kimi', key: KIMI_API_KEY, call: callKimi },
-    { name: 'zhipu', key: ZHIPU_API_KEY, call: callZhipu }
-  ] : [
-    { name: 'zhipu', key: ZHIPU_API_KEY, call: callZhipu },
-    { name: 'kimi', key: KIMI_API_KEY, call: callKimi }
-  ];
-
-  let lastError = null;
-  for (const provider of providers) {
-    if (!provider.key) continue;
-    try {
-      const result = await provider.call(provider.key, prompt);
-      const parsed = await parseAndFilter(result, students, courses);
-      return res.json({ provider: provider.name, ...parsed });
-    } catch (err) {
-      lastError = err;
-      continue;
-    }
-  }
-
-  return res.status(500).json({ error: '所有可用大模型调用失败', detail: lastError?.message || '无可用模型' });
 }
 
 async function callKimi(apiKey, prompt) {
@@ -158,10 +160,8 @@ async function parseAndFilter(content, students, courses) {
     throw new Error('解析 JSON 失败');
   }
 
-  // 规范化参数
   parsed.parameters = parsed.parameters || {};
 
-  // 如果是 update / add / subtract 意图，过滤并规范化 records
   if (parsed.intent === 'update' || parsed.intent === 'add' || parsed.intent === 'subtract') {
     const validStudents = students || [];
     const validCourses = courses || [];
